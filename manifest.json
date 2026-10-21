@@ -1,0 +1,43 @@
+{
+  "manifest_version": 3,
+  "name": "Gmail Crawler - Automated Mailbox & Thread Scraper",
+  "short_name": "Gmail Crawler",
+  "version": "2.0.0",
+  "description": "High-performance web crawler for Gmail. Extracts sender, receiver, date, subject, and body into structured CSV, JSON, or Excel with multi-page automation.",
+  "permissions": [
+    "activeTab"
+  ],
+  "host_permissions": [
+    "https://mail.google.com/*"
+  ],
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "Gmail Web Crawler",
+    "default_icon": {
+      "16": "icons/icon16.png",
+      "32": "icons/icon32.png",
+      "48": "icons/icon48.png",
+      "128": "icons/icon128.png"
+    }
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "https://mail.google.com/*"
+      ],
+      "js": [
+        "content.js"
+      ],
+      "css": [
+        "content.css"
+      ],
+      "run_at": "document_idle"
+    }
+  ],
+  "icons": {
+    "16": "icons/icon16.png",
+    "32": "icons/icon32.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  }
+}

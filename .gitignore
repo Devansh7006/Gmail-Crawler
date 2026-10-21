@@ -1,0 +1,12 @@
+# OS Metadata
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Output exports
+*.csv
+*.json
+!manifest.json
+
+# Logs
+*.log

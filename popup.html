@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gmail Crawler Pro</title>
+    <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+    <!-- Top HUD Header -->
+    <header class="hud-header">
+        <div class="brand">
+            <img src="icons/icon48.png" alt="Crawler Logo" class="brand-logo">
+            <div class="brand-text">
+                <h1>GMAIL CRAWLER</h1>
+                <span class="version-badge">v2.0 PRO</span>
+            </div>
+        </div>
+        <div class="target-beacon" id="target-beacon">
+            <span class="beacon-dot"></span>
+            <span class="beacon-label" id="beacon-text">SCANNING...</span>
+        </div>
+    </header>
+
+    <!-- Telemetry Stats Cards -->
+    <section class="telemetry-grid">
+        <div class="telemetry-card">
+            <span class="telemetry-label">DETECTED</span>
+            <div class="telemetry-value" id="stat-emails">--</div>
+            <span class="telemetry-sub" id="stat-emails-sub">in current view</span>
+        </div>
+        <div class="telemetry-card">
+            <span class="telemetry-label">TARGET VIEW</span>
+            <div class="telemetry-value text-cyan" id="stat-folder">INBOX</div>
+            <span class="telemetry-sub" id="stat-folder-sub">Active Section</span>
+        </div>
+        <div class="telemetry-card">
+            <span class="telemetry-label">CRAWL ENGINE</span>
+            <div class="telemetry-value text-emerald" id="stat-status">READY</div>
+            <span class="telemetry-sub">Passive 0% CPU</span>
+        </div>
+    </section>
+
+    <!-- Scope / Mode Configurator -->
+    <section class="config-panel">
+        <div class="section-title">
+            <span>CRAWL SCOPE</span>
+            <span class="mode-tag" id="selected-mode-tag">PAGE MODE</span>
+        </div>
+        
+        <div class="scope-tabs">
+            <button class="scope-tab active" data-mode="page">
+                <span class="tab-icon">⚡</span>
+                <span class="tab-name">Current View</span>
+            </button>
+            <button class="scope-tab" data-mode="bulk">
+                <span class="tab-icon">🌐</span>
+                <span class="tab-name">Multi-Page Bulk</span>
+            </button>
+            <button class="scope-tab" data-mode="deep">
+                <span class="tab-icon">🔍</span>
+                <span class="tab-name">Deep Body</span>
+            </button>
+        </div>
+
+        <!-- Multi-page depth setting (conditionally shown) -->
+        <div class="depth-slider-container" id="bulk-settings" style="display: none;">
+            <div class="slider-header">
+                <span>MAX PAGES TO CRAWL</span>
+                <span class="slider-value" id="depth-val">10 Pages (500 Mails)</span>
+            </div>
+            <input type="range" id="depth-slider" min="2" max="50" value="10" step="1" class="cyber-slider">
+        </div>
+    </section>
+
+    <!-- Terminal Log Stream -->
+    <section class="terminal-panel">
+        <div class="terminal-header">
+            <div class="terminal-dots">
+                <span class="dot red"></span>
+                <span class="dot yellow"></span>
+                <span class="dot green"></span>
+            </div>
+            <span class="terminal-title">LIVE CRAWLER TELEMETRY</span>
+            <button class="terminal-clear" id="btn-clear-log">CLEAR</button>
+        </div>
+        <div class="terminal-body" id="terminal-log">
+            <div class="log-line"><span class="log-ts">[INIT]</span> Neural Crawler core loaded.</div>
+            <div class="log-line text-cyan"><span class="log-ts">[LINK]</span> Connecting to active Gmail DOM...</div>
+        </div>
+    </section>
+
+    <!-- Export Format Selector -->
+    <section class="export-format-bar">
+        <span class="format-label">FORMAT:</span>
+        <div class="format-chips">
+            <label class="format-chip active">
+                <input type="radio" name="format" value="csv" checked>
+                <span>CSV (Excel)</span>
+            </label>
+            <label class="format-chip">
+                <input type="radio" name="format" value="json">
+                <span>JSON</span>
+            </label>
+        </div>
+        <div class="schema-pill">5 Attributes</div>
+    </section>
+
+    <!-- Primary Action Button -->
+    <footer class="action-footer">
+        <button class="cyber-btn primary" id="btn-crawl-start">
+            <span class="btn-glow"></span>
+            <span class="btn-icon">▶</span>
+            <span class="btn-text" id="crawl-btn-text">INITIALIZE CRAWLER</span>
+        </button>
+        <button class="cyber-btn danger" id="btn-crawl-stop" style="display: none;">
+            <span class="btn-icon">■</span>
+            <span class="btn-text">ABORT & EXPORT</span>
+        </button>
+    </footer>
+
+    <script src="popup.js"></script>
+</body>
+</html>
