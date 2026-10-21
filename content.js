@@ -1,5 +1,5 @@
-// Gmail Crawler Pro - Production Content Script
-// High-performance, zero-overhead passive execution.
+// Gmail Crawler Pro - Bulletproof Multi-Page & All-Folder Crawler
+// Safely advances across pages (50, 100, 500, 1000+ mails) and compiles into one single CSV.
 
 (function () {
     let isRunning = false;
@@ -42,7 +42,7 @@
                 subject = (subjectEl.innerText || "").trim();
             }
 
-            // Body (Snippet preview in inbox/spam list view)
+            // Body (Snippet preview in inbox list view)
             let body = "";
             const snippetEl = row.querySelector('span.y2');
             if (snippetEl) {
@@ -68,64 +68,85 @@
         return results;
     }
 
-    function extractOpenEmail(myEmail) {
-        const subjectEl = document.querySelector('h2.hP') || document.querySelector('[data-thread-perm-id]');
-        const subject = subjectEl ? (subjectEl.innerText || "").trim() : (document.title || "").replace(/ - Gmail$/, '').trim();
+    // Robust selector for Gmail's "Older" / "Next Page" pagination button
+    function getOlderButton() {
+        // Strategy 1: Look for aria-label or data-tooltip containing Older/Next
+        const candidates = Array.from(document.querySelectorAll(
+            'div[aria-label*="Older"], div[data-tooltip*="Older"], ' +
+            'div[aria-label*="Next"], div[data-tooltip*="Next"], ' +
+            'span[aria-label*="Older"], span[data-tooltip*="Older"]'
+        ));
 
-        let messageCards = document.querySelectorAll('div.adn.ads');
-        if (!messageCards || messageCards.length === 0) {
-            messageCards = document.querySelectorAll('div[data-message-id]');
-        }
-
-        const results = [];
-
-        if (messageCards && messageCards.length > 0) {
-            messageCards.forEach((card) => {
-                const senderEl = card.querySelector('span.gD') || card.querySelector('[email]');
-                const dateEl = card.querySelector('span.g3') || card.querySelector('.gH span[title]');
-                const bodyEl = card.querySelector('div.a3s.aiL') || card.querySelector('div.ii.gt');
-                const recEl = card.querySelector('span.g2');
-
-                let sender = "";
-                if (senderEl) {
-                    const em = senderEl.getAttribute('email');
-                    const nm = (senderEl.innerText || "").trim();
-                    sender = em ? (nm ? `${nm} <${em}>` : em) : nm;
-                }
-
-                let receiver = recEl ? (recEl.getAttribute('email') || (recEl.innerText || "").trim()) : myEmail;
-                let date = dateEl ? (dateEl.getAttribute('title') || (dateEl.innerText || "").trim()) : "";
-                let body = bodyEl ? (bodyEl.innerText || "").trim() : "";
-
-                if (sender || body) {
-                    results.push({
-                        sender: sender || "Unknown",
-                        receiver: receiver || myEmail,
-                        date: date || new Date().toISOString(),
-                        subject: subject || "No Subject",
-                        body: body || ""
-                    });
-                }
-            });
-        } else {
-            const bodyEl = document.querySelector('div.a3s.aiL') || document.querySelector('div.ii.gt');
-            if (bodyEl) {
-                const senderEl = document.querySelector('span.gD') || document.querySelector('[email]');
-                const dateEl = document.querySelector('span.g3') || document.querySelector('.gH span');
-                results.push({
-                    sender: senderEl ? (senderEl.getAttribute('email') || senderEl.innerText) : "Unknown",
-                    receiver: myEmail,
-                    date: dateEl ? (dateEl.getAttribute('title') || dateEl.innerText) : new Date().toLocaleString(),
-                    subject: subject || "Gmail Export",
-                    body: (bodyEl.innerText || "").trim()
-                });
+        for (const el of candidates) {
+            const rect = el.getBoundingClientRect();
+            const isVisible = rect.width > 0 && rect.height > 0;
+            const isDisabled = el.getAttribute('aria-disabled') === 'true' || 
+                               el.classList.contains('T-I-J3') || 
+                               el.getAttribute('disabled') !== null;
+            if (isVisible && !isDisabled) {
+                return el;
             }
         }
 
-        return results;
+        // Strategy 2: Find the range indicator (e.g., "1–50 of ...") and get the next sibling button
+        const allSpans = Array.from(document.querySelectorAll('span.Dj, span.amH, span, div'));
+        for (const span of allSpans) {
+            const text = span.textContent ? span.textContent.trim() : '';
+            if (/^\d+[\s–-]+\d+\s+of\s+/i.test(text)) {
+                const parent = span.closest('.J-J5-Ji') || span.parentElement;
+                if (parent) {
+                    const buttons = Array.from(parent.querySelectorAll('div[role="button"], span[role="button"]'));
+                    if (buttons.length >= 2) {
+                        const olderBtn = buttons[buttons.length - 1]; // Right button is "Older"
+                        const rect = olderBtn.getBoundingClientRect();
+                        const isVisible = rect.width > 0 && rect.height > 0;
+                        const isDisabled = olderBtn.getAttribute('aria-disabled') === 'true' || olderBtn.classList.contains('T-I-J3');
+                        if (isVisible && !isDisabled) {
+                            return olderBtn;
+                        }
+                    }
+                }
+            }
+        }
+
+        return null;
     }
 
-    // MULTI-PAGE BULK CRAWLER
+    // Triggers real pointer/mouse events to properly activate Google Closure UI buttons
+    function simulateRealClick(element) {
+        if (!element) return;
+        const rect = element.getBoundingClientRect();
+        const x = rect.left + rect.width / 2;
+        const y = rect.top + rect.height / 2;
+
+        const eventOpts = {
+            bubbles: true,
+            cancelable: true,
+            view: window,
+            clientX: x,
+            clientY: y
+        };
+
+        element.dispatchEvent(new PointerEvent('pointerdown', eventOpts));
+        element.dispatchEvent(new MouseEvent('mousedown', eventOpts));
+        element.dispatchEvent(new PointerEvent('pointerup', eventOpts));
+        element.dispatchEvent(new MouseEvent('mouseup', eventOpts));
+        element.dispatchEvent(new MouseEvent('click', eventOpts));
+
+        if (typeof element.click === 'function') {
+            element.click();
+        }
+    }
+
+    function getFirstRowSignature() {
+        const firstRow = document.querySelector('tr.zA');
+        if (!firstRow) return "";
+        const sub = firstRow.querySelector('.bog') ? firstRow.querySelector('.bog').innerText : "";
+        const date = firstRow.querySelector('.xW') ? firstRow.querySelector('.xW').innerText : "";
+        return (sub + "_" + date).trim();
+    }
+
+    // MULTI-PAGE BULK CRAWLER ENGINE
     async function runBulkCrawl(maxPages, format) {
         if (isRunning) return;
         isRunning = true;
@@ -133,35 +154,65 @@
 
         const myEmail = getAccountEmail();
         const allEmails = [];
+        const seenSignatures = new Set();
         let pageNum = 1;
 
-        showHudOverlay("Initializing Multi-Page Crawl...");
+        showHudOverlay("Initializing Multi-Page Crawler...");
 
         while (pageNum <= maxPages && !abortRequested) {
-            updateHudOverlay(pageNum, maxPages, allEmails.length, "Extracting page data...");
-            await sleep(400);
+            updateHudOverlay(pageNum, maxPages, allEmails.length, `Reading page ${pageNum}...`);
+            await sleep(500);
 
+            // Extract emails from current page
             const pageData = extractPageEmails(myEmail);
-            if (pageData.length > 0) {
-                allEmails.push(...pageData);
-                updateHudOverlay(pageNum, maxPages, allEmails.length, `Captured ${allEmails.length} emails.`);
+            let addedCount = 0;
+
+            for (const item of pageData) {
+                const sig = (item.sender + "||" + item.subject + "||" + item.date).toLowerCase();
+                if (!seenSignatures.has(sig)) {
+                    seenSignatures.add(sig);
+                    allEmails.push(item);
+                    addedCount++;
+                }
             }
 
-            // Find the "Older" / "Next" pagination button
-            const nextBtn = document.querySelector('div[aria-label*="Older"]') ||
-                            document.querySelector('div[data-tooltip*="Older"]') ||
-                            document.querySelector('div[aria-label*="Next"]') ||
-                            document.querySelector('div[data-tooltip*="Next"]');
+            updateHudOverlay(pageNum, maxPages, allEmails.length, `Page ${pageNum} complete (+${addedCount} emails).`);
 
-            if (!nextBtn || nextBtn.getAttribute('aria-disabled') === 'true') {
-                updateHudOverlay(pageNum, maxPages, allEmails.length, "Reached end of mailbox section.");
-                await sleep(800);
+            // If user clicked abort
+            if (abortRequested) {
                 break;
             }
 
+            // Find Next Page button
+            const nextBtn = getOlderButton();
+            if (!nextBtn) {
+                updateHudOverlay(pageNum, maxPages, allEmails.length, "Reached last page of this section.");
+                await sleep(1000);
+                break;
+            }
+
+            // Remember first email before clicking to verify the page actually flips
+            const signatureBefore = getFirstRowSignature();
+
             updateHudOverlay(pageNum, maxPages, allEmails.length, "Advancing to next page...");
-            nextBtn.click();
-            await sleep(1500);
+            simulateRealClick(nextBtn);
+
+            // Wait for DOM to load next page (up to 4.5 seconds)
+            let pageChanged = false;
+            for (let t = 0; t < 15; t++) {
+                await sleep(300);
+                if (getFirstRowSignature() !== signatureBefore) {
+                    pageChanged = true;
+                    break;
+                }
+            }
+
+            if (!pageChanged) {
+                // Try clicking once more
+                simulateRealClick(nextBtn);
+                await sleep(1200);
+            }
+
             pageNum++;
         }
 
@@ -170,68 +221,12 @@
 
         if (allEmails.length > 0) {
             saveExport(allEmails, format, `gmail_bulk_crawl_${allEmails.length}_emails`);
+        } else {
+            alert("No emails found to export.");
         }
     }
 
-    // DEEP FULL-BODY CRAWLER
-    async function runDeepCrawl(format) {
-        if (isRunning) return;
-        isRunning = true;
-        abortRequested = false;
-
-        const myEmail = getAccountEmail();
-        const rows = Array.from(document.querySelectorAll('tr.zA'));
-        if (rows.length === 0) {
-            alert("No email rows detected in current view.");
-            isRunning = false;
-            return;
-        }
-
-        showHudOverlay(`Deep Scanning ${rows.length} Threads...`);
-        const allEmails = [];
-
-        for (let i = 0; i < rows.length; i++) {
-            if (abortRequested) break;
-
-            updateHudOverlay(i + 1, rows.length, allEmails.length, `Opening thread ${i + 1}...`);
-
-            const currentRow = document.querySelectorAll('tr.zA')[i];
-            if (!currentRow) continue;
-
-            const clickTarget = currentRow.querySelector('.bog') || currentRow.querySelector('.yX') || currentRow;
-            clickTarget.click();
-
-            await waitFor(() => !!document.querySelector('div.a3s.aiL'), 3000);
-            await sleep(400);
-
-            const emailData = extractOpenEmail(myEmail);
-            if (emailData.length > 0) {
-                allEmails.push(...emailData);
-                updateHudOverlay(i + 1, rows.length, allEmails.length, `Extracted: ${emailData[0].subject.slice(0, 30)}...`);
-            }
-
-            const backBtn = document.querySelector('div[aria-label*="Back"]') ||
-                            document.querySelector('div[data-tooltip*="Back"]') ||
-                            document.querySelector('div[act="19"]');
-            if (backBtn) {
-                backBtn.click();
-            } else {
-                window.history.back();
-            }
-
-            await waitFor(() => document.querySelectorAll('tr.zA').length > 0, 3000);
-            await sleep(300);
-        }
-
-        removeHudOverlay();
-        isRunning = false;
-
-        if (allEmails.length > 0) {
-            saveExport(allEmails, format, `gmail_deep_crawl_${allEmails.length}_emails`);
-        }
-    }
-
-    // Export Handler: CSV or JSON
+    // Export Handler
     function saveExport(data, format, baseFilename) {
         if (!data || data.length === 0) return;
 
@@ -244,7 +239,6 @@
             mime = "application/json;charset=utf-8;";
             ext = "json";
         } else {
-            // Default CSV
             const headers = ["sender", "receiver", "date", "subject", "body"];
             const rows = [headers.join(",")];
             data.forEach(item => {
@@ -281,18 +275,6 @@
         return new Promise(res => setTimeout(res, ms));
     }
 
-    function waitFor(predicate, timeout = 3000) {
-        return new Promise(resolve => {
-            const start = Date.now();
-            const interval = setInterval(() => {
-                if (predicate() || Date.now() - start > timeout) {
-                    clearInterval(interval);
-                    resolve();
-                }
-            }, 100);
-        });
-    }
-
     // High-Tech Cyber HUD On-Screen Overlay
     function showHudOverlay(title) {
         removeHudOverlay();
@@ -300,38 +282,38 @@
         div.id = 'gmail-crawler-hud-box';
         div.style.cssText = `
             position: fixed;
-            top: 24px;
-            right: 24px;
+            top: 20px;
+            right: 20px;
             z-index: 9999999;
             background: #0a0d14;
             color: #f8fafc;
             font-family: 'Segoe UI', system-ui, sans-serif;
-            border: 1px solid rgba(0, 240, 255, 0.4);
+            border: 1px solid #00f0ff;
             border-radius: 8px;
-            padding: 16px;
-            width: 320px;
-            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.7), 0 0 15px rgba(0, 240, 255, 0.2);
+            padding: 16px 20px;
+            width: 340px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.8), 0 0 15px rgba(0, 240, 255, 0.3);
             animation: fadeIn 0.2s ease;
         `;
         div.innerHTML = `
-            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px; border-bottom:1px solid rgba(255,255,255,0.08); padding-bottom:8px;">
-                <span style="font-size:12px; font-weight:700; color:#00f0ff; letter-spacing:0.5px;">G-CRAWLER ACTIVE</span>
-                <span id="hud-page-count" style="font-size:11px; font-family:monospace; color:#94a3b8;">Page 1</span>
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px; border-bottom:1px solid rgba(255,255,255,0.1); padding-bottom:8px;">
+                <span style="font-size:13px; font-weight:700; color:#00f0ff; letter-spacing:0.5px;">GMAIL CRAWLER ACTIVE</span>
+                <span id="hud-page-count" style="font-size:12px; font-family:monospace; color:#8ab4f8;">Page 1</span>
             </div>
-            <div id="hud-status" style="font-size:11px; color:#cbd5e1; margin-bottom:12px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">
+            <div id="hud-status" style="font-size:12px; color:#cbd5e1; margin-bottom:12px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">
                 ${title}
             </div>
             <div style="display:flex; justify-content:space-between; align-items:center;">
-                <span id="hud-total-count" style="font-size:11px; color:#10b981; font-family:monospace;">0 Emails</span>
-                <button id="hud-abort-btn" style="background:#ef4444; color:#fff; border:none; padding:6px 12px; border-radius:4px; font-size:11px; font-weight:600; cursor:pointer;">
-                    ABORT & EXPORT
+                <span id="hud-total-count" style="font-size:13px; color:#10b981; font-weight:700; font-family:monospace;">0 Emails</span>
+                <button id="hud-abort-btn" style="background:#ef4444; color:#fff; border:none; padding:8px 14px; border-radius:4px; font-size:11px; font-weight:700; cursor:pointer;">
+                    STOP & DOWNLOAD CSV
                 </button>
             </div>
         `;
         document.body.appendChild(div);
         document.getElementById('hud-abort-btn').onclick = () => {
             abortRequested = true;
-            document.getElementById('hud-status').textContent = "Aborting and saving extracted data...";
+            document.getElementById('hud-status').textContent = "Stopping and compiling CSV file...";
         };
     }
 
@@ -340,9 +322,9 @@
         const statusEl = document.getElementById('hud-status');
         const totalEl = document.getElementById('hud-total-count');
 
-        if (pageEl) pageEl.textContent = `Page ${current} / ${max}`;
+        if (pageEl) pageEl.textContent = `Page ${current} ${max < 999 ? '/ ' + max : ''}`;
         if (statusEl) statusEl.textContent = msg;
-        if (totalEl) totalEl.textContent = `${total} Captured`;
+        if (totalEl) totalEl.textContent = `${total} Emails Captured`;
     }
 
     function removeHudOverlay() {
@@ -359,26 +341,17 @@
             const rowCount = document.querySelectorAll('tr.zA').length;
             sendResponse({ isEmail, rowCount });
         } else if (req.action === "crawl_page") {
-            let data = [];
-            const isEmail = !!(document.querySelector('div.a3s.aiL') || document.querySelector('h2.hP'));
-            if (isEmail) {
-                data = extractOpenEmail(myEmail);
-            } else {
-                data = extractPageEmails(myEmail);
-            }
+            const data = extractPageEmails(myEmail);
             if (data.length > 0) {
-                saveExport(data, req.format || 'csv', `gmail_crawl_${data.length}_emails`);
+                saveExport(data, req.format || 'csv', `gmail_single_page_${data.length}_emails`);
             }
             sendResponse({ count: data.length });
         } else if (req.action === "crawl_bulk") {
-            runBulkCrawl(req.maxPages || 10, req.format || 'csv');
-            sendResponse({ started: true });
-        } else if (req.action === "crawl_deep") {
-            runDeepCrawl(req.format || 'csv');
+            runBulkCrawl(req.maxPages || 999, req.format || 'csv');
             sendResponse({ started: true });
         }
         return true;
     });
 
-    console.log("[Gmail Crawler Pro] Engine ready.");
+    console.log("[Gmail Crawler Pro v2.1] Multi-page engine loaded.");
 })();

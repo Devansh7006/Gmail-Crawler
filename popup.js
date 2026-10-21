@@ -1,25 +1,22 @@
-// Cyber Void HUD - Gmail Crawler Popup Controller
+// Gmail Crawler Pro - Popup Controller (v2.1)
 
 document.addEventListener('DOMContentLoaded', async () => {
-    // DOM Elements
     const beacon = document.getElementById('target-beacon');
     const beaconText = document.getElementById('beacon-text');
     const statEmails = document.getElementById('stat-emails');
     const statEmailsSub = document.getElementById('stat-emails-sub');
     const statFolder = document.getElementById('stat-folder');
     const statStatus = document.getElementById('stat-status');
-    const scopeTabs = document.querySelectorAll('.scope-tab');
-    const bulkSettings = document.getElementById('bulk-settings');
-    const depthSlider = document.getElementById('depth-slider');
-    const depthVal = document.getElementById('depth-val');
-    const modeTag = document.getElementById('selected-mode-tag');
     const terminalLog = document.getElementById('terminal-log');
     const btnClearLog = document.getElementById('btn-clear-log');
     const btnStart = document.getElementById('btn-crawl-start');
-    const btnStop = document.getElementById('btn-crawl-stop');
     const crawlBtnText = document.getElementById('crawl-btn-text');
+    const optBulk = document.getElementById('opt-bulk');
+    const optPage = document.getElementById('opt-page');
+    const limitRow = document.getElementById('limit-row');
+    const pageLimitSelect = document.getElementById('page-limit-select');
 
-    let currentMode = 'page'; // 'page' | 'bulk' | 'deep'
+    let currentMode = 'bulk'; // Default to BULK MULTI-PAGE
     let activeTabId = null;
 
     function addLog(tag, msg, isCyan = false) {
@@ -36,45 +33,32 @@ document.addEventListener('DOMContentLoaded', async () => {
         addLog('SYS', 'Telemetry stream reset.');
     });
 
-    // Handle Depth Slider
-    depthSlider.addEventListener('input', (e) => {
-        const p = e.target.value;
-        depthVal.textContent = `${p} Pages (~${p * 50} Mails)`;
-    });
-
-    // Handle Mode Tabs
-    scopeTabs.forEach(tab => {
-        tab.addEventListener('click', () => {
-            scopeTabs.forEach(t => t.classList.remove('active'));
-            tab.classList.add('active');
-            currentMode = tab.dataset.mode;
-
-            if (currentMode === 'page') {
-                modeTag.textContent = 'PAGE MODE';
-                bulkSettings.style.display = 'none';
-                crawlBtnText.textContent = 'CRAWL CURRENT VIEW';
-                addLog('CONFIG', 'Switched to Single Page Scan mode.');
-            } else if (currentMode === 'bulk') {
-                modeTag.textContent = 'BULK CRAWLER';
-                bulkSettings.style.display = 'block';
-                crawlBtnText.textContent = 'LAUNCH BULK CRAWLER';
-                addLog('CONFIG', 'Switched to Multi-Page Auto Crawler.');
-            } else if (currentMode === 'deep') {
-                modeTag.textContent = 'DEEP INSPECTOR';
-                bulkSettings.style.display = 'none';
-                crawlBtnText.textContent = 'EXECUTE DEEP CRAWLER';
-                addLog('CONFIG', 'Switched to Full-Body Deep Thread mode.');
+    // Handle radio toggles
+    document.querySelectorAll('input[name="crawl_scope"]').forEach(radio => {
+        radio.addEventListener('change', (e) => {
+            currentMode = e.target.value;
+            if (currentMode === 'bulk') {
+                optBulk.classList.add('active');
+                optPage.classList.remove('active');
+                limitRow.style.display = 'flex';
+                crawlBtnText.textContent = 'START MULTI-PAGE CRAWL';
+                addLog('MODE', 'Selected: Multi-Page Bulk (Auto-Page Stepper).', true);
+            } else {
+                optPage.classList.add('active');
+                optBulk.classList.remove('active');
+                limitRow.style.display = 'none';
+                crawlBtnText.textContent = 'EXTRACT SINGLE PAGE (50)';
+                addLog('MODE', 'Selected: Current View only (50 mails).');
             }
         });
     });
 
-    // Format selection
     function getSelectedFormat() {
         const radio = document.querySelector('input[name="format"]:checked');
         return radio ? radio.value : 'csv';
     }
 
-    // Connect with active tab
+    // Connect with active Gmail tab
     try {
         const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
         activeTabId = tab ? tab.id : null;
@@ -82,11 +66,11 @@ document.addEventListener('DOMContentLoaded', async () => {
         if (!tab || !tab.url || !tab.url.includes("mail.google.com")) {
             beacon.classList.add('offline');
             beaconText.textContent = 'NO GMAIL LINK';
-            statStatus.textContent = 'IDLE';
+            statStatus.textContent = 'OFFLINE';
             statStatus.className = 'telemetry-value text-muted';
             btnStart.disabled = true;
             addLog('ERR', 'Active tab is not mail.google.com', false);
-            addLog('HELP', 'Open Gmail in active tab to begin.', true);
+            addLog('HELP', 'Open Gmail in your browser tab to begin.', true);
             return;
         }
 
@@ -107,9 +91,9 @@ document.addEventListener('DOMContentLoaded', async () => {
 
             beaconText.textContent = 'TARGET LOCKED';
             statEmails.textContent = res.rowCount || 0;
-            statEmailsSub.textContent = res.isEmail ? 'Thread open' : 'in current view';
+            statEmailsSub.textContent = res.isEmail ? 'Single Thread' : 'on current page';
             btnStart.disabled = false;
-            addLog('SCAN', `Located ${res.rowCount || 0} message node(s) in DOM.`);
+            addLog('SCAN', `Detected ${res.rowCount || 0} emails on current screen.`);
         });
 
     } catch (e) {
@@ -121,44 +105,25 @@ document.addEventListener('DOMContentLoaded', async () => {
         if (!activeTabId) return;
 
         const format = getSelectedFormat();
-        const maxPages = parseInt(depthSlider.value, 10) || 10;
+        const maxPages = parseInt(pageLimitSelect.value, 10) || 999;
 
         btnStart.disabled = true;
-        btnStart.classList.add('crawling');
-        crawlBtnText.textContent = 'CRAWLING ACTIVE...';
-        statStatus.textContent = 'BUSY';
-        statStatus.className = 'telemetry-value text-cyan';
+        crawlBtnText.textContent = 'LAUNCHING CRAWLER...';
 
-        if (currentMode === 'page') {
-            addLog('EXEC', `Extracting page rows into .${format.toUpperCase()}...`, true);
+        if (currentMode === 'bulk') {
+            addLog('EXEC', `Starting multi-page crawl (Limit: ${maxPages === 999 ? 'ALL' : maxPages} pages)...`, true);
+            chrome.tabs.sendMessage(activeTabId, { action: "crawl_bulk", maxPages, format }, () => {
+                // Close popup so user sees the on-screen live progress HUD on the Gmail page
+                window.close();
+            });
+        } else {
+            addLog('EXEC', `Extracting single page into .${format.toUpperCase()}...`, true);
             chrome.tabs.sendMessage(activeTabId, { action: "crawl_page", format }, (res) => {
-                finishCrawl(res ? res.count : 0);
-            });
-        } else if (currentMode === 'bulk') {
-            addLog('EXEC', `Auto-flipping up to ${maxPages} pages...`, true);
-            btnStop.style.display = 'block';
-            chrome.tabs.sendMessage(activeTabId, { action: "crawl_bulk", maxPages, format }, (res) => {
-                // Bulk crawler overlay handles on-page progress
-                window.close();
-            });
-        } else if (currentMode === 'deep') {
-            addLog('EXEC', 'Executing deep full-body crawler...', true);
-            btnStop.style.display = 'block';
-            chrome.tabs.sendMessage(activeTabId, { action: "crawl_deep", format }, (res) => {
-                window.close();
+                btnStart.disabled = false;
+                crawlBtnText.textContent = '✓ DOWNLOADED!';
+                addLog('DONE', `Captured ${res ? res.count : 0} emails.`, true);
+                setTimeout(() => window.close(), 1200);
             });
         }
     });
-
-    function finishCrawl(count) {
-        btnStart.disabled = false;
-        btnStart.classList.remove('crawling');
-        crawlBtnText.textContent = 'CRAWL FINISHED';
-        statStatus.textContent = 'READY';
-        statStatus.className = 'telemetry-value text-emerald';
-        addLog('DONE', `Captured ${count} emails. File downloaded.`, true);
-        setTimeout(() => {
-            crawlBtnText.textContent = 'EXECUTE CRAWLER';
-        }, 2000);
-    }
 });

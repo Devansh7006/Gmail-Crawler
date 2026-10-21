@@ -3,8 +3,85 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Gmail Crawler Pro</title>
+    <title>Gmail Bulk Crawler</title>
     <link rel="stylesheet" href="popup.css">
+    <style>
+        .mode-selection-box {
+            background: #111726;
+            border: 1px solid rgba(0, 240, 255, 0.25);
+            border-radius: 8px;
+            padding: 12px;
+            margin-bottom: 12px;
+        }
+        .mode-option {
+            display: flex;
+            align-items: flex-start;
+            gap: 10px;
+            padding: 8px 10px;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: all 0.2s;
+            margin-bottom: 6px;
+            border: 1px solid transparent;
+        }
+        .mode-option:last-child {
+            margin-bottom: 0;
+        }
+        .mode-option:hover {
+            background: rgba(0, 240, 255, 0.05);
+        }
+        .mode-option.active {
+            background: rgba(0, 240, 255, 0.1);
+            border-color: #00f0ff;
+        }
+        .mode-option input[type="radio"] {
+            margin-top: 3px;
+            accent-color: #00f0ff;
+            cursor: pointer;
+        }
+        .mode-info h4 {
+            font-size: 12px;
+            color: #f8fafc;
+            margin-bottom: 2px;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+        .mode-info p {
+            font-size: 10px;
+            color: #94a3b8;
+            line-height: 1.3;
+        }
+        .badge-rec {
+            font-size: 9px;
+            background: #10b981;
+            color: #000;
+            font-weight: 700;
+            padding: 1px 4px;
+            border-radius: 3px;
+        }
+        .page-limit-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-top: 10px;
+            padding-top: 8px;
+            border-top: 1px solid rgba(255, 255, 255, 0.06);
+            font-size: 11px;
+            color: #94a3b8;
+        }
+        .page-limit-select {
+            background: #0a0d14;
+            color: #00f0ff;
+            border: 1px solid rgba(0, 240, 255, 0.4);
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-family: monospace;
+            font-size: 11px;
+            outline: none;
+            cursor: pointer;
+        }
+    </style>
 </head>
 <body>
     <!-- Top HUD Header -->
@@ -12,8 +89,8 @@
         <div class="brand">
             <img src="icons/icon48.png" alt="Crawler Logo" class="brand-logo">
             <div class="brand-text">
-                <h1>GMAIL CRAWLER</h1>
-                <span class="version-badge">v2.0 PRO</span>
+                <h1>GMAIL CRAWLER PRO</h1>
+                <span class="version-badge">v2.1 BULK</span>
             </div>
         </div>
         <div class="target-beacon" id="target-beacon">
@@ -25,51 +102,49 @@
     <!-- Telemetry Stats Cards -->
     <section class="telemetry-grid">
         <div class="telemetry-card">
-            <span class="telemetry-label">DETECTED</span>
+            <span class="telemetry-label">INBOX ROWS</span>
             <div class="telemetry-value" id="stat-emails">--</div>
-            <span class="telemetry-sub" id="stat-emails-sub">in current view</span>
+            <span class="telemetry-sub" id="stat-emails-sub">on current page</span>
         </div>
         <div class="telemetry-card">
-            <span class="telemetry-label">TARGET VIEW</span>
-            <div class="telemetry-value text-cyan" id="stat-folder">INBOX</div>
-            <span class="telemetry-sub" id="stat-folder-sub">Active Section</span>
+            <span class="telemetry-label">SECTION</span>
+            <div class="telemetry-value text-cyan" id="stat-folder">ALL</div>
+            <span class="telemetry-sub">Inbox/Spam/All</span>
         </div>
         <div class="telemetry-card">
-            <span class="telemetry-label">CRAWL ENGINE</span>
+            <span class="telemetry-label">STATUS</span>
             <div class="telemetry-value text-emerald" id="stat-status">READY</div>
-            <span class="telemetry-sub">Passive 0% CPU</span>
+            <span class="telemetry-sub">Multi-Page Ready</span>
         </div>
     </section>
 
-    <!-- Scope / Mode Configurator -->
-    <section class="config-panel">
-        <div class="section-title">
-            <span>CRAWL SCOPE</span>
-            <span class="mode-tag" id="selected-mode-tag">PAGE MODE</span>
-        </div>
-        
-        <div class="scope-tabs">
-            <button class="scope-tab active" data-mode="page">
-                <span class="tab-icon">⚡</span>
-                <span class="tab-name">Current View</span>
-            </button>
-            <button class="scope-tab" data-mode="bulk">
-                <span class="tab-icon">🌐</span>
-                <span class="tab-name">Multi-Page Bulk</span>
-            </button>
-            <button class="scope-tab" data-mode="deep">
-                <span class="tab-icon">🔍</span>
-                <span class="tab-name">Deep Body</span>
-            </button>
-        </div>
-
-        <!-- Multi-page depth setting (conditionally shown) -->
-        <div class="depth-slider-container" id="bulk-settings" style="display: none;">
-            <div class="slider-header">
-                <span>MAX PAGES TO CRAWL</span>
-                <span class="slider-value" id="depth-val">10 Pages (500 Mails)</span>
+    <!-- Crawl Mode Selector -->
+    <section class="mode-selection-box">
+        <label class="mode-option active" id="opt-bulk">
+            <input type="radio" name="crawl_scope" value="bulk" checked>
+            <div class="mode-info">
+                <h4>🌐 CRAWL ALL PAGES <span class="badge-rec">RECOMMENDED</span></h4>
+                <p>Auto-flips through pages 1, 2, 3... to extract <strong>ALL emails</strong> into a single combined CSV.</p>
             </div>
-            <input type="range" id="depth-slider" min="2" max="50" value="10" step="1" class="cyber-slider">
+        </label>
+
+        <label class="mode-option" id="opt-page">
+            <input type="radio" name="crawl_scope" value="page">
+            <div class="mode-info">
+                <h4>⚡ Single Page Only</h4>
+                <p>Extract only the 50 emails currently visible on this single screen.</p>
+            </div>
+        </label>
+
+        <div class="page-limit-row" id="limit-row">
+            <span>Crawl Depth:</span>
+            <select class="page-limit-select" id="page-limit-select">
+                <option value="999" selected>All Available Pages (Until End)</option>
+                <option value="50">50 Pages (~2,500 Emails)</option>
+                <option value="20">20 Pages (~1,000 Emails)</option>
+                <option value="10">10 Pages (~500 Emails)</option>
+                <option value="5">5 Pages (~250 Emails)</option>
+            </select>
         </div>
     </section>
 
@@ -81,16 +156,16 @@
                 <span class="dot yellow"></span>
                 <span class="dot green"></span>
             </div>
-            <span class="terminal-title">LIVE CRAWLER TELEMETRY</span>
+            <span class="terminal-title">CRAWLER TELEMETRY</span>
             <button class="terminal-clear" id="btn-clear-log">CLEAR</button>
         </div>
         <div class="terminal-body" id="terminal-log">
-            <div class="log-line"><span class="log-ts">[INIT]</span> Neural Crawler core loaded.</div>
-            <div class="log-line text-cyan"><span class="log-ts">[LINK]</span> Connecting to active Gmail DOM...</div>
+            <div class="log-line"><span class="log-ts">[INIT]</span> Multi-page crawler engine ready.</div>
+            <div class="log-line text-cyan"><span class="log-ts">[TARGET]</span> Select 'All Pages' to scrape entire mailbox.</div>
         </div>
     </section>
 
-    <!-- Export Format Selector -->
+    <!-- Export Format Bar -->
     <section class="export-format-bar">
         <span class="format-label">FORMAT:</span>
         <div class="format-chips">
@@ -106,16 +181,12 @@
         <div class="schema-pill">5 Attributes</div>
     </section>
 
-    <!-- Primary Action Button -->
+    <!-- Action Button -->
     <footer class="action-footer">
         <button class="cyber-btn primary" id="btn-crawl-start">
             <span class="btn-glow"></span>
             <span class="btn-icon">▶</span>
-            <span class="btn-text" id="crawl-btn-text">INITIALIZE CRAWLER</span>
-        </button>
-        <button class="cyber-btn danger" id="btn-crawl-stop" style="display: none;">
-            <span class="btn-icon">■</span>
-            <span class="btn-text">ABORT & EXPORT</span>
+            <span class="btn-text" id="crawl-btn-text">START MULTI-PAGE CRAWL</span>
         </button>
     </footer>
 
