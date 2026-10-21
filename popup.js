@@ -1,4 +1,4 @@
-// Gmail Crawler Pro - Popup Controller (v2.2 Turbo)
+// Gmail Crawler Pro - Popup Controller (v2.3)
 
 document.addEventListener('DOMContentLoaded', async () => {
     const beacon = document.getElementById('target-beacon');
@@ -6,7 +6,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     const statEmails = document.getElementById('stat-emails');
     const statFolder = document.getElementById('stat-folder');
     const statStatus = document.getElementById('stat-status');
-    const btnTurbo = document.getElementById('btn-crawl-turbo');
+    const btnFull = document.getElementById('btn-crawl-full');
     const btnPage = document.getElementById('btn-crawl-page');
     const pageLimitSelect = document.getElementById('page-limit-select');
 
@@ -26,7 +26,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             beaconText.textContent = 'NO GMAIL LINK';
             statStatus.textContent = 'OFFLINE';
             statStatus.className = 'telemetry-value text-muted';
-            btnTurbo.disabled = true;
+            btnFull.disabled = true;
             btnPage.disabled = true;
             return;
         }
@@ -39,14 +39,14 @@ document.addEventListener('DOMContentLoaded', async () => {
             if (chrome.runtime.lastError || !res) {
                 beaconText.textContent = 'HOOK ATTACHED';
                 statEmails.textContent = 'Ready';
-                btnTurbo.disabled = false;
+                btnFull.disabled = false;
                 btnPage.disabled = false;
                 return;
             }
 
             beaconText.textContent = 'TARGET LOCKED';
             statEmails.textContent = res.rowCount || 0;
-            btnTurbo.disabled = false;
+            btnFull.disabled = false;
             btnPage.disabled = false;
         });
 
@@ -54,21 +54,21 @@ document.addEventListener('DOMContentLoaded', async () => {
         statStatus.textContent = 'ERROR';
     }
 
-    // ⚡ TURBO MULTI-PAGE CRAWL
-    btnTurbo.addEventListener('click', () => {
+    // Full Historic Crawl
+    btnFull.addEventListener('click', () => {
         if (!activeTabId) return;
         const format = getSelectedFormat();
         const maxPages = parseInt(pageLimitSelect.value, 10) || 999;
 
-        btnTurbo.disabled = true;
-        btnTurbo.innerHTML = '<span>⚡</span> <span>LAUNCHING TURBO ENGINE...</span>';
+        btnFull.disabled = true;
+        btnFull.innerHTML = '<span>⏳</span> <span>INITIALIZING HISTORICAL CRAWLER...</span>';
 
-        chrome.tabs.sendMessage(activeTabId, { action: "crawl_turbo", maxPages, format }, () => {
+        chrome.tabs.sendMessage(activeTabId, { action: "crawl_historic", maxPages, format }, () => {
             window.close(); // Closes popup so user views on-screen live progress HUD
         });
     });
 
-    // SINGLE PAGE EXTRACT
+    // Single Page Extract
     btnPage.addEventListener('click', () => {
         if (!activeTabId) return;
         const format = getSelectedFormat();

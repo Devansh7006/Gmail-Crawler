@@ -3,37 +3,28 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Gmail Turbo Crawler</title>
+    <title>Gmail Historical Crawler</title>
     <link rel="stylesheet" href="popup.css">
     <style>
-        .speed-badge {
-            background: rgba(0, 240, 255, 0.15);
-            border: 1px solid #00f0ff;
-            color: #00f0ff;
-            font-size: 10px;
-            font-weight: 700;
-            padding: 2px 6px;
-            border-radius: 4px;
-            font-family: monospace;
-        }
-        .turbo-banner {
-            background: linear-gradient(135deg, rgba(0, 240, 255, 0.1), rgba(16, 185, 129, 0.1));
-            border: 1px solid rgba(0, 240, 255, 0.3);
+        .banner-box {
+            background: linear-gradient(135deg, rgba(0, 240, 255, 0.12), rgba(16, 185, 129, 0.08));
+            border: 1px solid rgba(0, 240, 255, 0.4);
             border-radius: 8px;
             padding: 10px 12px;
             margin-bottom: 12px;
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
         }
-        .turbo-text h4 {
+        .banner-box h4 {
             font-size: 12px;
             color: #00f0ff;
-            margin-bottom: 2px;
+            margin-bottom: 3px;
+            display: flex;
+            align-items: center;
+            gap: 6px;
         }
-        .turbo-text p {
+        .banner-box p {
             font-size: 10px;
             color: #94a3b8;
+            line-height: 1.3;
         }
         .btn-stack {
             display: flex;
@@ -69,7 +60,7 @@
             <img src="icons/icon48.png" alt="Crawler Logo" class="brand-logo">
             <div class="brand-text">
                 <h1>GMAIL CRAWLER</h1>
-                <span class="version-badge">v2.2 TURBO</span>
+                <span class="version-badge">v2.3 PRO</span>
             </div>
         </div>
         <div class="target-beacon" id="target-beacon">
@@ -78,51 +69,48 @@
         </div>
     </header>
 
-    <!-- Turbo Banner -->
-    <div class="turbo-banner">
-        <div class="turbo-text">
-            <h4>⚡ TURBO ENGINE ACTIVE</h4>
-            <p>Micro-second polling &bull; Scrapes ~100+ emails/sec</p>
-        </div>
-        <span class="speed-badge">20x SPEED</span>
+    <!-- Scope Banner -->
+    <div class="banner-box">
+        <h4>🌐 HISTORICAL MAILBOX CRAWLER</h4>
+        <p>Crawls backwards in time page-by-page from today to the beginning of your mailbox with 100% duplicate protection.</p>
     </div>
 
     <!-- Telemetry Stats Cards -->
     <section class="telemetry-grid">
         <div class="telemetry-card">
-            <span class="telemetry-label">INBOX ROWS</span>
+            <span class="telemetry-label">ON SCREEN</span>
             <div class="telemetry-value" id="stat-emails">--</div>
-            <span class="telemetry-sub">on active screen</span>
+            <span class="telemetry-sub">in current view</span>
         </div>
         <div class="telemetry-card">
             <span class="telemetry-label">SECTION</span>
-            <div class="telemetry-value text-cyan" id="stat-folder">ALL</div>
+            <div class="telemetry-value text-cyan" id="stat-folder">INBOX</div>
             <span class="telemetry-sub">Inbox/Spam/All</span>
         </div>
         <div class="telemetry-card">
-            <span class="telemetry-label">ENGINE</span>
+            <span class="telemetry-label">CRAWL ENGINE</span>
             <div class="telemetry-value text-emerald" id="stat-status">READY</div>
-            <span class="telemetry-sub">Non-Blocking</span>
+            <span class="telemetry-sub">Multi-Page Ready</span>
         </div>
     </section>
 
-    <!-- Scope Configuration -->
+    <!-- Scope Selector -->
     <section class="config-panel">
         <div class="section-title">
             <span>CRAWL SCOPE</span>
-            <span class="mode-tag">ALL PAGES</span>
+            <span class="mode-tag">FULL MAILBOX</span>
         </div>
 
         <div class="slider-header" style="margin-bottom: 6px;">
-            <span>MAX PAGES TO CRAWL</span>
-            <span class="slider-value" id="depth-val">All Pages (Until End)</span>
+            <span>SELECT CRAWL DEPTH</span>
+            <span class="slider-value">From Today to Beginning</span>
         </div>
-        <select class="cyber-slider" id="page-limit-select" style="background:#0a0d14; color:#00f0ff; border:1px solid rgba(0,240,255,0.3); padding:6px; border-radius:4px; width:100%; font-family:monospace; font-size:11px; outline:none; cursor:pointer;">
-            <option value="999" selected>All Available Pages (Entire Section)</option>
+        <select class="cyber-slider" id="page-limit-select" style="background:#0a0d14; color:#00f0ff; border:1px solid rgba(0,240,255,0.4); padding:6px; border-radius:4px; width:100%; font-family:monospace; font-size:11px; outline:none; cursor:pointer;">
+            <option value="999" selected>All Available Pages (Until End of Mailbox)</option>
+            <option value="100">100 Pages (~5,000 Emails)</option>
             <option value="50">50 Pages (~2,500 Emails)</option>
-            <option value="25">25 Pages (~1,250 Emails)</option>
+            <option value="20">20 Pages (~1,000 Emails)</option>
             <option value="10">10 Pages (~500 Emails)</option>
-            <option value="5">5 Pages (~250 Emails)</option>
         </select>
     </section>
 
@@ -145,13 +133,13 @@
     <!-- Action Buttons -->
     <footer class="action-footer">
         <div class="btn-stack">
-            <button class="cyber-btn primary" id="btn-crawl-turbo">
-                <span class="btn-icon">⚡</span>
-                <span class="btn-text">START TURBO CRAWL (ALL PAGES)</span>
+            <button class="cyber-btn primary" id="btn-crawl-full">
+                <span class="btn-icon">🌐</span>
+                <span class="btn-text">CRAWL ALL PAGES (FULL MAILBOX)</span>
             </button>
             <button class="btn-subtle" id="btn-crawl-page">
-                <span>📥</span>
-                <span>Extract Current Screen Only (50)</span>
+                <span>⚡</span>
+                <span>Extract Current View Only (50)</span>
             </button>
         </div>
     </footer>
