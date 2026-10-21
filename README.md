@@ -37,7 +37,7 @@ Every exported record maps directly to the following 5 structured attributes:
 
 1. Clone or download this repository:
    ```bash
-   git clone https://github.com/YOUR_USERNAME/Gmail-Crawler.git
+   git clone https://github.com/Devansh7006/Gmail-Crawler.git
    ```
 2. Open your browser's extensions page:
    * **Google Chrome:** `chrome://extensions`
