@@ -1,31 +1,40 @@
-// Gmail Crawler Pro - Perfected Multi-Page Historic Mailbox Crawler (v2.3)
-// Guarantees 100% unique emails from beginning to end with verified page transitions & hash-router fallback.
+// Gmail Crawler Pro - Bulletproof Multi-Page Historical Mailbox Crawler (v2.4)
+// Traverses all historical pages from beginning to end with verified page transitions & 100% deduplication.
 
 (function () {
     let isRunning = false;
     let abortRequested = false;
 
+    // Detect Account Email (Receiver)
     function getAccountEmail() {
         try {
             const profileEl = document.querySelector('a[aria-label*="@"]') ||
-                              document.querySelector('[data-identifier*="@"]');
+                              document.querySelector('[data-identifier*="@"]') ||
+                              document.querySelector('div[aria-label*="Google Account:"]');
             if (profileEl) {
-                const match = (profileEl.getAttribute('aria-label') || profileEl.getAttribute('data-identifier') || '').match(/([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})/);
+                const raw = profileEl.getAttribute('aria-label') || profileEl.getAttribute('data-identifier') || '';
+                const match = raw.match(/([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})/);
                 if (match) return match[1];
             }
         } catch (e) {}
         return "Me";
     }
 
-    function extractPageEmails(myEmail) {
-        const rows = document.querySelectorAll('tr.zA');
+    // Extract Visible Emails on the Active Screen
+    function extractVisibleEmails(myEmail) {
+        const allRows = document.querySelectorAll('tr.zA');
         const results = [];
-        const len = rows.length;
+        const len = allRows.length;
 
         for (let i = 0; i < len; i++) {
-            const row = rows[i];
-            
-            // Sender
+            const row = allRows[i];
+
+            // Ignore hidden rows from background/cached tabs
+            if (row.offsetParent === null && window.getComputedStyle(row).display === 'none') {
+                continue;
+            }
+
+            // 1. Sender
             let sender = "";
             const senderEl = row.querySelector('.yX [email]') || 
                              row.querySelector('.yX span.bA4 span') || 
@@ -34,25 +43,28 @@
                 const emailAttr = senderEl.getAttribute('email');
                 const text = (senderEl.textContent || "").trim();
                 sender = emailAttr ? (text && text !== emailAttr ? `${text} <${emailAttr}>` : emailAttr) : text;
+            } else {
+                const generic = row.querySelector('.yX, .bA4');
+                if (generic) sender = (generic.textContent || "").trim();
             }
 
-            // Subject
+            // 2. Subject
             let subject = "";
-            const subjectEl = row.querySelector('span.bog');
+            const subjectEl = row.querySelector('span.bog, .bog span');
             if (subjectEl) {
                 subject = (subjectEl.textContent || "").trim();
             }
 
-            // Body (Snippet preview in inbox list view)
+            // 3. Body snippet preview
             let body = "";
-            const snippetEl = row.querySelector('span.y2');
+            const snippetEl = row.querySelector('span.y2, .y2');
             if (snippetEl) {
                 body = (snippetEl.textContent || "").replace(/^[\s–-]+/, '').trim();
             }
 
-            // Date
+            // 4. Date
             let date = "";
-            const dateEl = row.querySelector('.xW span[title]') || row.querySelector('.xW span');
+            const dateEl = row.querySelector('.xW span[title]') || row.querySelector('.xW span') || row.querySelector('.xW');
             if (dateEl) {
                 date = dateEl.getAttribute('title') || (dateEl.textContent || "").trim();
             }
@@ -69,27 +81,88 @@
         return results;
     }
 
-    // Identifies the signature of the top row to detect when the page actually transitions
-    function getTopRowSignature() {
-        const firstRow = document.querySelector('tr.zA');
-        if (!firstRow) return "";
-        const sender = firstRow.querySelector('.yX') ? firstRow.querySelector('.yX').textContent.trim() : "";
-        const subject = firstRow.querySelector('.bog') ? firstRow.querySelector('.bog').textContent.trim() : "";
-        const date = firstRow.querySelector('.xW') ? firstRow.querySelector('.xW').textContent.trim() : "";
-        return `${sender}||${subject}||${date}`;
+    // Detect Gmail's Official Pagination Text (e.g., "1–50 of 2,419" or "51–100 of many")
+    function getPaginationInfo() {
+        // Targeted Gmail pagination classes
+        const primary = document.querySelectorAll('.Dj, .amH, span.ts, [aria-live="polite"] span, div.ar5 span');
+        for (let i = 0; i < primary.length; i++) {
+            const el = primary[i];
+            const text = (el.textContent || '').trim();
+            const match = text.match(/(\d+)[\s–-]+(\d+)\s+(?:of|\/)\s+([0-9,]+|\S+)/i);
+            if (match) {
+                return {
+                    raw: text,
+                    start: parseInt(match[1], 10),
+                    end: parseInt(match[2], 10),
+                    total: match[3],
+                    element: el
+                };
+            }
+        }
+
+        // Broader search in toolbar spans
+        const allSpans = document.querySelectorAll('header span, nav span, .ar5 span, .ar4 span, div[role="main"] span');
+        for (let j = 0; j < allSpans.length; j++) {
+            const el = allSpans[j];
+            const text = (el.textContent || '').trim();
+            const match = text.match(/(\d+)[\s–-]+(\d+)\s+of\s+/i);
+            if (match) {
+                return {
+                    raw: text,
+                    start: parseInt(match[1], 10),
+                    end: parseInt(match[2], 10),
+                    total: '',
+                    element: el
+                };
+            }
+        }
+
+        return null;
     }
 
-    // Locate the active "Older" / "Next Page" pagination button
+    function isElementVisible(el) {
+        if (!el) return false;
+        const rect = el.getBoundingClientRect();
+        if (rect.width === 0 || rect.height === 0) return false;
+        try {
+            const style = window.getComputedStyle(el);
+            return style.display !== 'none' && style.visibility !== 'hidden';
+        } catch (e) {
+            return true;
+        }
+    }
+
+    // Strict check if Older button is disabled (signaling true end of mailbox)
+    function isOlderButtonDisabled(btn) {
+        if (!btn) return true;
+        if (btn.getAttribute('aria-disabled') === 'true') return true;
+        if (btn.classList.contains('T-I-J3') || btn.classList.contains('T-I-JW')) return true;
+        if (btn.disabled === true || (btn.hasAttribute('disabled') && btn.getAttribute('disabled') !== 'false')) return true;
+        try {
+            const style = window.getComputedStyle(btn);
+            if (style.pointerEvents === 'none' || parseFloat(style.opacity) < 0.4) return true;
+        } catch (e) {}
+        return false;
+    }
+
+    // Locate the active "Older" / Next Page pagination button
     function getOlderButton() {
+        // Strategy 1: Targeted selectors across Gmail versions, button types, and languages
         const selectors = [
-            'div[aria-label="Older"]',
-            'div[data-tooltip="Older"]',
-            'div[aria-label*="Older"]',
-            'div[data-tooltip*="Older"]',
-            'div[aria-label="Next"]',
-            'div[data-tooltip="Next"]',
-            'div[aria-label*="Purane"]',
-            'div[data-tooltip*="Purane"]',
+            'button[aria-label*="Older" i]',
+            'button[data-tooltip*="Older" i]',
+            '[role="button"][aria-label*="Older" i]',
+            '[role="button"][data-tooltip*="Older" i]',
+            'div[aria-label*="Older" i]',
+            'div[data-tooltip*="Older" i]',
+            '[aria-label*="Older messages" i]',
+            '[data-tooltip*="Older messages" i]',
+            '[aria-label*="Purane" i]',
+            '[data-tooltip*="Purane" i]',
+            '[aria-label*="पुराने"]',
+            '.ar5 .amD',
+            '.amD[role="button"]',
+            'button[act="20"]',
             'div[act="20"]'
         ];
 
@@ -97,35 +170,21 @@
             const elements = document.querySelectorAll(selectors[i]);
             for (let j = 0; j < elements.length; j++) {
                 const el = elements[j];
-                const rect = el.getBoundingClientRect();
-                const isVisible = rect.width > 0 && rect.height > 0 && window.getComputedStyle(el).display !== 'none';
-                const isDisabled = el.getAttribute('aria-disabled') === 'true' || 
-                                   el.classList.contains('T-I-J3') || 
-                                   el.getAttribute('disabled') !== null;
-                if (isVisible && !isDisabled) {
+                if (isElementVisible(el)) {
                     return el;
                 }
             }
         }
 
-        // Fallback: Find the pagination indicator container (e.g., "1–50 of ...")
-        const allSpans = Array.from(document.querySelectorAll('span.Dj, span.amH, span, div'));
-        for (let i = 0; i < allSpans.length; i++) {
-            const span = allSpans[i];
-            const text = span.textContent ? span.textContent.trim() : '';
-            if (/^\d+[\s–-]+\d+\s+of\s+/i.test(text)) {
-                const parent = span.closest('.J-J5-Ji') || span.parentElement;
-                if (parent) {
-                    const buttons = Array.from(parent.querySelectorAll('div[role="button"], span[role="button"]'));
-                    if (buttons.length >= 2) {
-                        const olderBtn = buttons[buttons.length - 1]; // Right button is Older
-                        const rect = olderBtn.getBoundingClientRect();
-                        const isVisible = rect.width > 0 && rect.height > 0;
-                        const isDisabled = olderBtn.getAttribute('aria-disabled') === 'true' || olderBtn.classList.contains('T-I-J3');
-                        if (isVisible && !isDisabled) {
-                            return olderBtn;
-                        }
-                    }
+        // Strategy 2: Structural search in the pagination indicator toolbar
+        const pag = getPaginationInfo();
+        if (pag && pag.element) {
+            const container = pag.element.closest('.ar5, .ar4, .J-J5-Ji') || pag.element.parentElement;
+            if (container) {
+                const buttons = Array.from(container.querySelectorAll('button, [role="button"], .T-I')).filter(isElementVisible);
+                if (buttons.length >= 2) {
+                    // In Gmail's pagination toolbar [Newer, Older], the last button is Older
+                    return buttons[buttons.length - 1];
                 }
             }
         }
@@ -133,39 +192,92 @@
         return null;
     }
 
-    // Trigger full mouse and pointer sequence to activate Google Closure event listeners
-    function simulateRealClick(element) {
-        if (!element) return;
-        const rect = element.getBoundingClientRect();
-        const x = rect.left + rect.width / 2;
-        const y = rect.top + rect.height / 2;
+    // Trigger genuine user interaction to activate Google Closure event listeners
+    function triggerClick(btn) {
+        if (!btn) return false;
+
+        try { btn.scrollIntoView({ block: 'nearest', inline: 'nearest' }); } catch(e) {}
+        try { btn.focus(); } catch(e) {}
+
+        const rect = btn.getBoundingClientRect();
+        const clientX = rect.left + rect.width / 2;
+        const clientY = rect.top + rect.height / 2;
 
         const eventOpts = {
             bubbles: true,
             cancelable: true,
             view: window,
-            clientX: x,
-            clientY: y
+            clientX: clientX,
+            clientY: clientY,
+            button: 0,
+            buttons: 1
         };
 
-        element.dispatchEvent(new PointerEvent('pointerdown', eventOpts));
-        element.dispatchEvent(new MouseEvent('mousedown', eventOpts));
-        element.dispatchEvent(new PointerEvent('pointerup', eventOpts));
-        element.dispatchEvent(new MouseEvent('mouseup', eventOpts));
-        element.dispatchEvent(new MouseEvent('click', eventOpts));
+        // Dispatch on innermost child and button itself
+        const child = btn.querySelector('svg, div, span, path') || btn;
 
-        if (typeof element.click === 'function') {
-            element.click();
+        child.dispatchEvent(new PointerEvent('pointerdown', eventOpts));
+        child.dispatchEvent(new MouseEvent('mousedown', eventOpts));
+        child.dispatchEvent(new PointerEvent('pointerup', eventOpts));
+        child.dispatchEvent(new MouseEvent('mouseup', eventOpts));
+        child.dispatchEvent(new MouseEvent('click', eventOpts));
+
+        if (typeof btn.click === 'function') {
+            btn.click();
         }
+
+        try {
+            btn.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', code: 'Enter', keyCode: 13, which: 13, bubbles: true }));
+            btn.dispatchEvent(new KeyboardEvent('keyup', { key: 'Enter', code: 'Enter', keyCode: 13, which: 13, bubbles: true }));
+        } catch(e) {}
+
+        return true;
     }
 
-    function getBaseSection() {
-        const hash = (window.location.hash || "").replace(/^#/, '');
-        const section = hash.split('/p')[0] || "inbox";
-        return section || "inbox";
+    // Capture state to mathematically verify page transition
+    function getPageState() {
+        const pag = getPaginationInfo();
+        const rows = Array.from(document.querySelectorAll('tr.zA')).filter(r => r.offsetParent !== null);
+        
+        let firstSig = "";
+        let lastSig = "";
+        if (rows.length > 0) {
+            const f = rows[0];
+            const l = rows[rows.length - 1];
+            firstSig = (f.querySelector('.yX')?.textContent || '') + '::' + (f.querySelector('.bog')?.textContent || '') + '::' + (f.querySelector('.xW')?.textContent || '');
+            lastSig = (l.querySelector('.yX')?.textContent || '') + '::' + (l.querySelector('.bog')?.textContent || '') + '::' + (l.querySelector('.xW')?.textContent || '');
+        }
+
+        return {
+            start: pag ? pag.start : 0,
+            end: pag ? pag.end : 0,
+            rawPagination: pag ? pag.raw : '',
+            rowCount: rows.length,
+            firstSig,
+            lastSig
+        };
     }
 
-    // 🌐 BULLETPROOF HISTORIC CRAWLER: Crawls all pages backwards in time from beginning to end
+    function hasStateChanged(before, current) {
+        // 1. Pagination numbers shifted (e.g. 1 -> 51)
+        if (before.start > 0 && current.start > 0 && before.start !== current.start) {
+            return true;
+        }
+        // 2. Pagination raw string changed
+        if (before.rawPagination && current.rawPagination && before.rawPagination !== current.rawPagination) {
+            return true;
+        }
+        // 3. Row signature changed (first or last row differs)
+        if (before.firstSig && current.firstSig && before.firstSig !== current.firstSig) {
+            return true;
+        }
+        if (before.lastSig && current.lastSig && before.lastSig !== current.lastSig) {
+            return true;
+        }
+        return false;
+    }
+
+    // 🌐 BULLETPROOF HISTORIC CRAWLER: Traverses from today to beginning of mailbox
     async function runHistoricCrawl(maxPages, format) {
         if (isRunning) return;
         isRunning = true;
@@ -176,16 +288,19 @@
         const seenSignatures = new Set();
         let pageNum = 1;
 
-        showHudOverlay("Initializing Mailbox Historical Crawler...");
+        showHudOverlay("Connecting to Historical Mailbox Stream...");
 
         while (pageNum <= maxPages && !abortRequested) {
-            // Extract emails currently on screen
-            const pageData = extractPageEmails(myEmail);
+            // Allow DOM to settle
+            await sleep(250);
+
+            // Scrape all visible emails on the current page
+            const pageData = extractVisibleEmails(myEmail);
             let addedCount = 0;
 
             for (let i = 0; i < pageData.length; i++) {
                 const item = pageData[i];
-                // Strict composite signature to guarantee ZERO duplicate rows
+                // Strict composite signature to guarantee 100% duplicate protection
                 const sig = (item.sender + "::" + item.subject + "::" + item.date).toLowerCase();
                 if (!seenSignatures.has(sig)) {
                     seenSignatures.add(sig);
@@ -194,69 +309,87 @@
                 }
             }
 
-            // Find oldest date reached so far
-            let oldestDate = "";
-            if (allEmails.length > 0) {
-                oldestDate = allEmails[allEmails.length - 1].date;
-            }
+            const oldestDate = allEmails.length > 0 ? allEmails[allEmails.length - 1].date : "Scanning...";
+            const pag = getPaginationInfo();
+            const pagLabel = pag ? pag.raw : `Page ${pageNum}`;
 
             updateHudOverlay(
                 pageNum, 
                 maxPages, 
                 allEmails.length, 
-                `Page ${pageNum} (+${addedCount} unique) // Earliest: ${oldestDate || 'Scanning...'}`
+                `[${pagLabel}] +${addedCount} unique // Earliest: ${oldestDate}`
             );
 
             if (abortRequested) break;
-
-            // If a page yielded 0 new unique emails on page > 1, verify if we reached the end
-            if (pageNum > 1 && addedCount === 0) {
-                console.log("[Gmail Crawler] No new emails on this page. Mailbox end reached.");
-                updateHudOverlay(pageNum, maxPages, allEmails.length, "Reached end of mailbox! Finalizing...");
-                await sleep(600);
+            if (pageNum >= maxPages) {
+                console.log("[Gmail Crawler] Reached configured max pages limit.");
                 break;
             }
 
-            // Record signature before flipping page
-            const signatureBefore = getTopRowSignature();
-
-            // Try Button Click first
-            const nextBtn = getOlderButton();
-            if (nextBtn) {
-                simulateRealClick(nextBtn);
+            // Verify if Older button is available and enabled
+            const olderBtn = getOlderButton();
+            if (!olderBtn || isOlderButtonDisabled(olderBtn)) {
+                console.log("[Gmail Crawler] Older button is disabled. Reached true end of mailbox.");
+                updateHudOverlay(pageNum, maxPages, allEmails.length, "✓ Reached end of mailbox! Compiling CSV...");
+                await sleep(1000);
+                break;
             }
 
-            // Wait for DOM to update with new emails
-            let pageChanged = false;
-            for (let t = 0; t < 25; t++) {
-                await sleep(100);
-                if (getTopRowSignature() !== signatureBefore) {
-                    pageChanged = true;
+            // Record state prior to click
+            const stateBefore = getPageState();
+
+            // Transition to next page with retry loop (up to 3 attempts, 5s each)
+            let pageTransitioned = false;
+            for (let attempt = 1; attempt <= 3; attempt++) {
+                if (abortRequested) break;
+
+                const btn = getOlderButton();
+                if (!btn || isOlderButtonDisabled(btn)) {
+                    // Button became disabled -> end reached
+                    pageTransitioned = false;
                     break;
                 }
-            }
 
-            // If button click did not trigger page load, use Gmail's Hash Router fallback
-            if (!pageChanged) {
-                const section = getBaseSection();
-                const nextHash = `#${section}/p${pageNum + 1}`;
-                console.log(`[Gmail Crawler] Attempting Hash Navigation to ${nextHash}`);
-                window.location.hash = nextHash;
+                updateHudOverlay(
+                    pageNum,
+                    maxPages,
+                    allEmails.length,
+                    `Turning page ${pageNum} ➔ ${pageNum + 1}... (Attempt ${attempt}/3)`
+                );
 
-                for (let t2 = 0; t2 < 25; t2++) {
-                    await sleep(100);
-                    if (getTopRowSignature() !== signatureBefore) {
-                        pageChanged = true;
+                triggerClick(btn);
+
+                // Poll for state change up to 5 seconds
+                for (let w = 0; w < 35; w++) {
+                    if (abortRequested) break;
+                    await sleep(150);
+                    const currentState = getPageState();
+                    if (hasStateChanged(stateBefore, currentState)) {
+                        pageTransitioned = true;
                         break;
                     }
                 }
+
+                if (pageTransitioned) break;
+
+                console.warn(`[Gmail Crawler] Attempt ${attempt} timed out waiting for page change. Retrying click...`);
+                await sleep(500);
             }
 
-            // If the page STILL did not change after both methods, we are at the very end of the mailbox!
-            if (!pageChanged) {
-                console.log("[Gmail Crawler] Mailbox end reached (no further pages available).");
-                updateHudOverlay(pageNum, maxPages, allEmails.length, "End of mailbox reached. Compiling CSV...");
-                await sleep(800);
+            if (abortRequested) break;
+
+            if (!pageTransitioned) {
+                const finalBtn = getOlderButton();
+                if (!finalBtn || isOlderButtonDisabled(finalBtn)) {
+                    console.log("[Gmail Crawler] Reached end of mailbox.");
+                    updateHudOverlay(pageNum, maxPages, allEmails.length, "✓ Reached end of mailbox! Finalizing...");
+                    await sleep(800);
+                    break;
+                }
+
+                console.warn("[Gmail Crawler] Page did not transition after retries. Finalizing collected emails.");
+                updateHudOverlay(pageNum, maxPages, allEmails.length, "No further pages responded. Compiling CSV...");
+                await sleep(1000);
                 break;
             }
 
@@ -267,9 +400,9 @@
         isRunning = false;
 
         if (allEmails.length > 0) {
-            saveExport(allEmails, format, `gmail_complete_crawled_${allEmails.length}_unique_emails`);
+            saveExport(allEmails, format, `gmail_crawled_${allEmails.length}_unique_emails`);
         } else {
-            alert("No emails found to export.");
+            alert("No emails found to export in the current view.");
         }
     }
 
@@ -339,7 +472,7 @@
             border: 1px solid #00f0ff;
             border-radius: 8px;
             padding: 16px 20px;
-            width: 360px;
+            width: 380px;
             box-shadow: 0 10px 30px rgba(0, 0, 0, 0.9), 0 0 25px rgba(0, 240, 255, 0.4);
         `;
         div.innerHTML = `
@@ -379,7 +512,7 @@
         if (el) el.remove();
     }
 
-    // Message Listener for Popup
+    // Message Listener for Extension Popup
     chrome.runtime.onMessage.addListener((req, sender, sendResponse) => {
         const myEmail = getAccountEmail();
 
@@ -387,7 +520,7 @@
             const rowCount = document.querySelectorAll('tr.zA').length;
             sendResponse({ rowCount });
         } else if (req.action === "crawl_page") {
-            const data = extractPageEmails(myEmail);
+            const data = extractVisibleEmails(myEmail);
             if (data.length > 0) {
                 saveExport(data, req.format || 'csv', `gmail_single_page_${data.length}_emails`);
             }
@@ -399,5 +532,5 @@
         return true;
     });
 
-    console.log("[Gmail Crawler Pro v2.3] Historical Mailbox Engine loaded.");
+    console.log("[Gmail Crawler Pro v2.4] Historical Mailbox Engine active.");
 })();
