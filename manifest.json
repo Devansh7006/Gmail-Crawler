@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "Gmail Crawler - Automated Mailbox & Thread Scraper",
   "short_name": "Gmail Crawler",
-  "version": "2.4.0",
+  "version": "2.5.0",
   "description": "High-performance web crawler for Gmail. Extracts sender, receiver, date, subject, and body into structured CSV, JSON, or Excel with multi-page automation.",
   "permissions": [
     "activeTab"
