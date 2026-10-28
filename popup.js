@@ -1,4 +1,4 @@
-// Gmail Crawler Pro - Popup Controller (v2.3)
+// Gmail Crawler Pro - Popup Controller (v2.6)
 
 document.addEventListener('DOMContentLoaded', async () => {
     const beacon = document.getElementById('target-beacon');
@@ -9,6 +9,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     const btnFull = document.getElementById('btn-crawl-full');
     const btnPage = document.getElementById('btn-crawl-page');
     const pageLimitSelect = document.getElementById('page-limit-select');
+    const folderScopeSelect = document.getElementById('folder-scope-select');
 
     let activeTabId = null;
 
@@ -59,11 +60,12 @@ document.addEventListener('DOMContentLoaded', async () => {
         if (!activeTabId) return;
         const format = getSelectedFormat();
         const maxPages = parseInt(pageLimitSelect.value, 10) || 999;
+        const scope = folderScopeSelect ? folderScopeSelect.value : 'all_sweep';
 
         btnFull.disabled = true;
-        btnFull.innerHTML = '<span>⏳</span> <span>INITIALIZING HISTORICAL CRAWLER...</span>';
+        btnFull.innerHTML = '<span>⏳</span> <span>STARTING FULL MAILBOX SWEEP...</span>';
 
-        chrome.tabs.sendMessage(activeTabId, { action: "crawl_historic", maxPages, format }, () => {
+        chrome.tabs.sendMessage(activeTabId, { action: "crawl_historic", maxPages, format, scope }, () => {
             window.close(); // Closes popup so user views on-screen live progress HUD
         });
     });

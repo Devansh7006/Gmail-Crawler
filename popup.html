@@ -60,7 +60,7 @@
             <img src="icons/icon48.png" alt="Crawler Logo" class="brand-logo">
             <div class="brand-text">
                 <h1>GMAIL CRAWLER</h1>
-                <span class="version-badge">v2.5 PRO</span>
+                <span class="version-badge">v2.6 PRO</span>
             </div>
         </div>
         <div class="target-beacon" id="target-beacon">
@@ -71,8 +71,8 @@
 
     <!-- Scope Banner -->
     <div class="banner-box">
-        <h4>🌐 HISTORICAL MAILBOX CRAWLER</h4>
-        <p>Crawls backwards in time page-by-page from today to the beginning of your mailbox with 100% duplicate protection.</p>
+        <h4>🌐 MULTI-SECTION HISTORIC CRAWLER</h4>
+        <p>Crawls All Mail, Inbox, and Spam page-by-page from today back to the beginning of time with 100% duplicate protection.</p>
     </div>
 
     <!-- Telemetry Stats Cards -->
@@ -84,25 +84,37 @@
         </div>
         <div class="telemetry-card">
             <span class="telemetry-label">SECTION</span>
-            <div class="telemetry-value text-cyan" id="stat-folder">INBOX</div>
+            <div class="telemetry-value text-cyan" id="stat-folder">ALL MAIL</div>
             <span class="telemetry-sub">Inbox/Spam/All</span>
         </div>
         <div class="telemetry-card">
             <span class="telemetry-label">CRAWL ENGINE</span>
             <div class="telemetry-value text-emerald" id="stat-status">READY</div>
-            <span class="telemetry-sub">Multi-Page Ready</span>
+            <span class="telemetry-sub">Multi-Section Sweep</span>
         </div>
     </section>
 
     <!-- Scope Selector -->
     <section class="config-panel">
         <div class="section-title">
-            <span>CRAWL SCOPE</span>
-            <span class="mode-tag">FULL MAILBOX</span>
+            <span>CRAWL CONFIG</span>
+            <span class="mode-tag">ALL FOLDERS</span>
         </div>
 
         <div class="slider-header" style="margin-bottom: 6px;">
-            <span>SELECT CRAWL DEPTH</span>
+            <span>TARGET FOLDERS</span>
+            <span class="slider-value">All Mail + Spam</span>
+        </div>
+        <select class="cyber-slider" id="folder-scope-select" style="background:#0a0d14; color:#00f0ff; border:1px solid rgba(0,240,255,0.4); padding:6px; border-radius:4px; width:100%; font-family:monospace; font-size:11px; outline:none; cursor:pointer; margin-bottom:10px;">
+            <option value="all_sweep" selected>🌐 Full Sweep: All Mail + Inbox + Spam (Recommended)</option>
+            <option value="all_mail">📬 All Mail (Inbox + Archive + Sent)</option>
+            <option value="inbox">📥 Inbox Only</option>
+            <option value="spam">🚫 Spam Only</option>
+            <option value="current">⚡ Current View Only</option>
+        </select>
+
+        <div class="slider-header" style="margin-bottom: 6px;">
+            <span>CRAWL DEPTH</span>
             <span class="slider-value">From Today to Beginning</span>
         </div>
         <select class="cyber-slider" id="page-limit-select" style="background:#0a0d14; color:#00f0ff; border:1px solid rgba(0,240,255,0.4); padding:6px; border-radius:4px; width:100%; font-family:monospace; font-size:11px; outline:none; cursor:pointer;">

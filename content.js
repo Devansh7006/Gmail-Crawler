@@ -1,5 +1,5 @@
-// Gmail Crawler Pro - Bulletproof Multi-Page Historical Mailbox Crawler (v2.5)
-// Traverses all historical pages from beginning to end with verified page transitions & 100% deduplication.
+// Gmail Crawler Pro - Multi-Section Historical Mailbox Crawler (v2.6)
+// Complete traversal of Inbox, All Mail, and Spam with verified pagination transitions & 100% deduplication.
 
 (function () {
     let isRunning = false;
@@ -285,23 +285,19 @@
         }
     }
 
-    // Rewind back to Page 1 (today's newest emails) before running historical crawl
+    // Rewind back to Page 1 (today's newest emails) before crawling section
     async function rewindToFirstPage() {
         const pag = getPaginationInfo();
         if (!pag || pag.start <= 1) {
-            return; // Already on page 1
+            return;
         }
 
-        updateHudOverlay(1, 999, 0, "Rewinding to newest emails (Page 1)...");
-
-        // Try hash reset first
         const baseHash = (window.location.hash || '#inbox').split('/p')[0] || '#inbox';
         if (window.location.hash !== baseHash) {
             window.location.hash = baseHash;
             await sleep(600);
         }
 
-        // Click Newer button repeatedly until it is disabled
         for (let i = 0; i < 25; i++) {
             const pagNow = getPaginationInfo();
             if (pagNow && pagNow.start <= 1) break;
@@ -314,6 +310,41 @@
         }
 
         await waitForPageSettled();
+    }
+
+    // Navigate to a specific Gmail section (e.g., #all, #spam, #inbox)
+    async function navigateToSection(sectionHash) {
+        if (!sectionHash || sectionHash === 'current') return true;
+
+        console.log(`[Gmail Crawler] Navigating to ${sectionHash}...`);
+        const currentHash = (window.location.hash || '').split('/')[0];
+
+        if (currentHash !== sectionHash) {
+            window.location.hash = sectionHash;
+            await sleep(1000);
+
+            // Fallback: Click sidebar navigation item if hash didn't switch
+            let sidebarSelector = '';
+            if (sectionHash === '#all') {
+                sidebarSelector = 'a[href*="#all"], [data-tooltip*="All Mail" i], a[title*="All Mail" i]';
+            } else if (sectionHash === '#spam') {
+                sidebarSelector = 'a[href*="#spam"], [data-tooltip*="Spam" i], a[title*="Spam" i]';
+            } else if (sectionHash === '#inbox') {
+                sidebarSelector = 'a[href*="#inbox"], [data-tooltip*="Inbox" i], a[title*="Inbox" i]';
+            }
+
+            if (sidebarSelector) {
+                const link = document.querySelector(sidebarSelector);
+                if (link) {
+                    triggerClick(link);
+                    await sleep(1000);
+                }
+            }
+        }
+
+        await waitForPageSettled();
+        await rewindToFirstPage();
+        return true;
     }
 
     // Wait for the Older button to become ready and enabled
@@ -359,34 +390,20 @@
         return false;
     }
 
-    // 🌐 BULLETPROOF HISTORIC CRAWLER: Traverses from today to beginning of mailbox
-    async function runHistoricCrawl(maxPages, format) {
-        if (isRunning) return;
-        isRunning = true;
-        abortRequested = false;
-
-        const myEmail = getAccountEmail();
-        const allEmails = [];
-        const seenSignatures = new Set();
+    // Crawls all available pages of a single section backwards in time
+    async function crawlSectionPages(sectionLabel, maxPages, allEmails, seenSignatures, phaseInfo = "") {
         let pageNum = 1;
         let consecutiveFailedTransitions = 0;
-
-        showHudOverlay("Connecting to Historical Mailbox Stream...");
-
-        // Auto-rewind to Page 1 so we always start from the latest emails
-        await rewindToFirstPage();
+        const myEmail = getAccountEmail();
 
         while (pageNum <= maxPages && !abortRequested) {
-            // Step 1: Ensure current page is settled
             await waitForPageSettled();
 
-            // Step 2: Scrape all visible emails on the current page
             const pageData = extractVisibleEmails(myEmail);
             let addedCount = 0;
 
             for (let i = 0; i < pageData.length; i++) {
                 const item = pageData[i];
-                // Strict composite signature to guarantee 100% duplicate protection
                 const sig = (item.sender + "::" + item.subject + "::" + item.date).toLowerCase();
                 if (!seenSignatures.has(sig)) {
                     seenSignatures.add(sig);
@@ -403,34 +420,28 @@
                 pageNum, 
                 maxPages, 
                 allEmails.length, 
-                `[${pagLabel}] +${addedCount} new // Earliest: ${oldestDate}`
+                `${phaseInfo}[${sectionLabel}: ${pagLabel}] +${addedCount} new // Earliest: ${oldestDate}`
             );
 
             if (abortRequested) break;
             if (pageNum >= maxPages) {
-                console.log("[Gmail Crawler] Reached configured max pages limit.");
+                console.log(`[Gmail Crawler] Reached configured max pages limit in ${sectionLabel}.`);
                 break;
             }
 
-            // Step 3: Record state prior to click
             const stateBefore = getPageState();
 
-            // Step 4: Verify if Older button is ready (with 3.5s tolerance for DOM render)
             let olderBtn = await waitForOlderButtonReady(3500);
             if (!olderBtn || isButtonDisabled(olderBtn)) {
-                // Double check after 1.5 seconds to confirm it's truly the end of the mailbox
                 await sleep(1500);
                 const recheckBtn = getPaginationControls().olderBtn;
                 if (!recheckBtn || isButtonDisabled(recheckBtn)) {
-                    console.log("[Gmail Crawler] Older button confirmed disabled. Reached true end of mailbox.");
-                    updateHudOverlay(pageNum, maxPages, allEmails.length, "✓ Reached end of mailbox! Compiling CSV...");
-                    await sleep(1000);
+                    console.log(`[Gmail Crawler] Older button confirmed disabled in ${sectionLabel}. Reached end of folder.`);
                     break;
                 }
                 olderBtn = recheckBtn;
             }
 
-            // Step 5: Transition to next page with retry loop (up to 4 attempts)
             let pageTransitioned = false;
             for (let attempt = 1; attempt <= 4; attempt++) {
                 if (abortRequested) break;
@@ -443,7 +454,6 @@
                 }
 
                 if (isButtonDisabled(btn)) {
-                    // Check if permanently disabled
                     await sleep(1000);
                     if (isButtonDisabled(getPaginationControls().olderBtn)) {
                         pageTransitioned = false;
@@ -455,12 +465,11 @@
                     pageNum,
                     maxPages,
                     allEmails.length,
-                    `Advancing page ${pageNum} ➔ ${pageNum + 1}... (Attempt ${attempt}/4)`
+                    `${phaseInfo}Advancing ${sectionLabel} ${pageNum} ➔ ${pageNum + 1}... (Attempt ${attempt}/4)`
                 );
 
                 triggerClick(btn);
 
-                // On attempt >= 2, also dispatch Gmail keyboard shortcut
                 if (attempt >= 2) {
                     try {
                         document.dispatchEvent(new KeyboardEvent('keydown', { key: 'g', code: 'KeyG', bubbles: true }));
@@ -469,14 +478,13 @@
                     } catch(e) {}
                 }
 
-                // Poll for state change up to 6 seconds
                 const transitioned = await waitForNewPageLoad(stateBefore, 6000);
                 if (transitioned) {
                     pageTransitioned = true;
                     break;
                 }
 
-                console.warn(`[Gmail Crawler] Page ${pageNum} attempt ${attempt} timed out. Retrying...`);
+                console.warn(`[Gmail Crawler] ${sectionLabel} page ${pageNum} attempt ${attempt} timed out. Retrying...`);
                 await sleep(500);
             }
 
@@ -485,17 +493,13 @@
             if (!pageTransitioned) {
                 const finalControls = getPaginationControls();
                 if (!finalControls.olderBtn || isButtonDisabled(finalControls.olderBtn)) {
-                    console.log("[Gmail Crawler] Reached end of mailbox.");
-                    updateHudOverlay(pageNum, maxPages, allEmails.length, "✓ Reached end of mailbox! Finalizing...");
-                    await sleep(800);
+                    console.log(`[Gmail Crawler] Reached end of ${sectionLabel}.`);
                     break;
                 }
 
                 consecutiveFailedTransitions++;
                 if (consecutiveFailedTransitions >= 2) {
-                    console.warn("[Gmail Crawler] Page did not transition after multiple attempts. Compiling results.");
-                    updateHudOverlay(pageNum, maxPages, allEmails.length, "Crawl complete. Compiling CSV...");
-                    await sleep(1000);
+                    console.warn(`[Gmail Crawler] Page did not transition after multiple attempts in ${sectionLabel}.`);
                     break;
                 }
             } else {
@@ -503,14 +507,59 @@
                 pageNum++;
             }
         }
+    }
+
+    // 🌐 BULLETPROOF MULTI-SECTION HISTORIC CRAWLER
+    async function runHistoricCrawl(maxPages, format, scope = 'all_sweep') {
+        if (isRunning) return;
+        isRunning = true;
+        abortRequested = false;
+
+        const allEmails = [];
+        const seenSignatures = new Set();
+
+        showHudOverlay("Connecting to Historical Mailbox Stream...");
+
+        if (scope === 'all_sweep') {
+            // Phase 1: All Mail (covers Inbox, Sent, Archive, Categories)
+            updateHudOverlay(1, maxPages, 0, "Phase 1/2: Navigating to All Mail (includes Inbox)...");
+            await navigateToSection('#all');
+            await crawlSectionPages("All Mail", maxPages, allEmails, seenSignatures, "Phase 1/2: ");
+
+            // Phase 2: Spam Folder
+            if (!abortRequested) {
+                updateHudOverlay(1, maxPages, allEmails.length, "Phase 2/2: Navigating to Spam Folder...");
+                await navigateToSection('#spam');
+                await crawlSectionPages("Spam", maxPages, allEmails, seenSignatures, "Phase 2/2: ");
+            }
+        } else if (scope === 'all_mail') {
+            updateHudOverlay(1, maxPages, 0, "Navigating to All Mail...");
+            await navigateToSection('#all');
+            await crawlSectionPages("All Mail", maxPages, allEmails, seenSignatures);
+        } else if (scope === 'inbox') {
+            updateHudOverlay(1, maxPages, 0, "Navigating to Inbox...");
+            await navigateToSection('#inbox');
+            await crawlSectionPages("Inbox", maxPages, allEmails, seenSignatures);
+        } else if (scope === 'spam') {
+            updateHudOverlay(1, maxPages, 0, "Navigating to Spam...");
+            await navigateToSection('#spam');
+            await crawlSectionPages("Spam", maxPages, allEmails, seenSignatures);
+        } else {
+            // Current open view
+            await rewindToFirstPage();
+            await crawlSectionPages("Current View", maxPages, allEmails, seenSignatures);
+        }
 
         removeHudOverlay();
         isRunning = false;
 
         if (allEmails.length > 0) {
-            saveExport(allEmails, format, `gmail_complete_${allEmails.length}_emails_beginning_to_end`);
+            const filename = scope === 'all_sweep' ? 
+                `gmail_complete_all_mail_inbox_and_spam_${allEmails.length}_emails` : 
+                `gmail_crawled_${scope}_${allEmails.length}_emails`;
+            saveExport(allEmails, format, filename);
         } else {
-            alert("No emails found to export in the current view.");
+            alert("No emails found to export in the selected folders.");
         }
     }
 
@@ -580,7 +629,7 @@
             border: 1px solid #00f0ff;
             border-radius: 8px;
             padding: 16px 20px;
-            width: 380px;
+            width: 400px;
             box-shadow: 0 10px 30px rgba(0, 0, 0, 0.9), 0 0 25px rgba(0, 240, 255, 0.4);
         `;
         div.innerHTML = `
@@ -634,11 +683,11 @@
             }
             sendResponse({ count: data.length });
         } else if (req.action === "crawl_historic") {
-            runHistoricCrawl(req.maxPages || 999, req.format || 'csv');
+            runHistoricCrawl(req.maxPages || 999, req.format || 'csv', req.scope || 'all_sweep');
             sendResponse({ started: true });
         }
         return true;
     });
 
-    console.log("[Gmail Crawler Pro v2.5] Historical Mailbox Engine active.");
+    console.log("[Gmail Crawler Pro v2.6] Multi-Section Historic Mailbox Engine active.");
 })();
